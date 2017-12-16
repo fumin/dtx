@@ -68,7 +68,7 @@ type DuplicateRequestError struct {
 }
 
 func (err *DuplicateRequestError) Error() string {
-	return fmt.Sprintf("%+v %+v", err.req, err.existingReq)
+	return fmt.Sprintf("request %+v duplicates existing request %+v", err.req, err.existingReq)
 }
 
 // A TransactionCommittedError reports that a transaction has been committed,
@@ -78,17 +78,17 @@ type TransactionCommittedError struct {
 }
 
 func (err *TransactionCommittedError) Error() string {
-	return fmt.Sprintf("%+v", err.txItem)
+	return fmt.Sprintf("transaction commited %+v", err.txItem)
 }
 
-// A TransactionCommittedError reports that a transaction has been rolled back.
+// A TransactionRolledBackError reports that a transaction has been rolled back.
 // A rolled back is neither able to take new operations nor be committed.
 type TransactionRolledBackError struct {
 	txItem *transactionItem
 }
 
 func (err *TransactionRolledBackError) Error() string {
-	return fmt.Sprintf("%+v", err.txItem)
+	return fmt.Sprintf("transaction rolledback %+v", err.txItem)
 }
 
 // A Retrier controls how much time a coordinator has to wait before the next retry, and when it should stop retrying.
