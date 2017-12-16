@@ -81,6 +81,15 @@ var (
 	exprNameImageID   = ":exprNameImageID"
 )
 
+type notFoundError struct {
+	tableName string
+	key       map[string]*dynamodb.AttributeValue
+}
+
+func (e *notFoundError) Error() string {
+	return fmt.Sprintf("item not found in table %s key %+v", e.tableName, e.key)
+}
+
 // A Transaction groups multiple operations so that either all of them fail or all of them succeed together.
 // In addition, reads in a transaction are isolated from other transactions,
 // in that it is guaranteed that items are not updated by other transactions
@@ -365,7 +374,7 @@ func driveRequest(tx *Transaction, clientRequest txRequest) (map[string]*dynamod
 	return item, nil
 }
 
-func checkToBeLockedItem(tx *Transaction, req txRequest) (bool, *Transaction, error) {
+func probeToBeLockedItem(tx *Transaction, req txRequest) (bool, *Transaction, error) {
 	expectExists := false
 	item, owner, err := getItemTx(tx.txManager, req)
 	if err != nil {
@@ -422,9 +431,9 @@ func lockAndApply(tx *Transaction, clientRequest txRequest) (map[string]*dynamod
 
 		var otherTransaction *Transaction
 		var err error
-		expectExists, otherTransaction, err = checkToBeLockedItem(tx, clientRequest)
+		expectExists, otherTransaction, err = probeToBeLockedItem(tx, clientRequest)
 		if err != nil {
-			return nil, errors.Wrap(err, "checkToBeLockedItem")
+			return nil, errors.Wrap(err, "probeToBeLockedItem")
 		}
 
 		if !tx.Retrier.Wait() {
@@ -679,10 +688,10 @@ func rollbackItemAndReleaseLock(tx *Transaction, request txRequest) error {
 	// Check item needs to be handled.
 	item, err := getItemByKey(tx.txManager, request.getTableName(), request.getKey())
 	if err != nil {
+		if _, ok := err.(*notFoundError); ok {
+			return nil
+		}
 		return errors.Wrap(err, "getItemByKey")
-	}
-	if item == nil {
-		return nil
 	}
 	owner := txGetOwner(item)
 	if owner != tx.txItem.id {
@@ -765,11 +774,10 @@ func unlockItemAfterCommit(tx *Transaction, request txRequest) error {
 	// Check if item needs to be handled.
 	item, err := getItemByKey(tx.txManager, request.getTableName(), request.getKey())
 	if err != nil {
+		if _, ok := err.(*notFoundError); ok {
+			return nil
+		}
 		return errors.Wrap(err, "getItemByKey")
-	}
-	if item == nil {
-		// Item has been deleted.
-		return nil
 	}
 	owner := txGetOwner(item)
 	if owner != tx.txItem.id {
@@ -904,10 +912,10 @@ func stripSpecialAttributes(item map[string]*dynamodb.AttributeValue) {
 func getItemTx(txManager *TransactionManager, req txRequest) (map[string]*dynamodb.AttributeValue, *Transaction, error) {
 	item, err := getItemByKey(txManager, req.getTableName(), req.getKey())
 	if err != nil {
+		if _, ok := err.(*notFoundError); ok {
+			return nil, nil, nil
+		}
 		return nil, nil, errors.Wrap(err, "getItemByKey")
-	}
-	if item == nil {
-		return nil, nil, nil
 	}
 
 	owner := txGetOwner(item)
@@ -931,7 +939,15 @@ func getItemByKey(txManager *TransactionManager, tableName string, key map[strin
 	}
 	resp, err := txManager.client.GetItem(input)
 	if err != nil {
-		return nil, errors.Wrap(err, "GetItem")
+		if awsErr, ok := err.(awserr.Error); ok {
+			if awsErr.Code() == "ValidationException" {
+				return nil, &notFoundError{tableName: tableName, key: key}
+			}
+		}
+		return nil, errors.Wrap(err, fmt.Sprintf("GetItem error for table %s key %+v", tableName, key))
+	}
+	if len(resp.Item) == 0 {
+		return nil, &notFoundError{tableName: tableName, key: key}
 	}
 	return resp.Item, nil
 }

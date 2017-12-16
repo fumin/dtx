@@ -1893,28 +1893,22 @@ type assertItemNotLockedArg struct {
 func assertItemNotLocked(arg assertItemNotLockedArg) error {
 	item, err := getItemByKey(manager, arg.tableName, arg.key)
 	if err != nil {
+		if _, ok := err.(*notFoundError); ok && !arg.shouldExist {
+			return nil
+		}
 		return fmt.Errorf("getItemByKey %v", err)
 	}
-	if arg.shouldExist {
-		if item == nil {
-			return fmt.Errorf("item not exists")
-		}
-		if _, ok := item[AttributeNameTransient]; ok {
-			return fmt.Errorf("item is transient %+v", item)
-		}
-		if _, ok := item[AttributeNameTxID]; ok {
-			return fmt.Errorf("item is locked %+v", item)
-		}
-		if _, ok := item[AttributeNameApplied]; ok {
-			return fmt.Errorf("item is applied %+v", item)
-		}
-		if _, ok := item[AttributeNameDate]; ok {
-			return fmt.Errorf("item has date %+v", item)
-		}
-	} else {
-		if item != nil {
-			return fmt.Errorf("item should not exist")
-		}
+	if _, ok := item[AttributeNameTransient]; ok {
+		return fmt.Errorf("item is transient %+v", item)
+	}
+	if _, ok := item[AttributeNameTxID]; ok {
+		return fmt.Errorf("item is locked %+v", item)
+	}
+	if _, ok := item[AttributeNameApplied]; ok {
+		return fmt.Errorf("item is applied %+v", item)
+	}
+	if _, ok := item[AttributeNameDate]; ok {
+		return fmt.Errorf("item has date %+v", item)
 	}
 
 	if arg.expected != nil {
