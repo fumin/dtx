@@ -2,6 +2,7 @@ package dtx
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ const (
 	maxItemSizeBytes = 1024 * 400 // 400kb
 
 	integLockTableName   = "dtxIntegLockTableName"
+	txTTLTimeout         = 24 * time.Hour
 	integImagesTableName = "dtxIntegImagesTableName"
 
 	integHashTableName  = "dtxIntegHashTableName"
@@ -40,7 +42,7 @@ var (
 		Credentials: credentials.NewStaticCredentials(awsAccessKeyID, awsSecretAccessKey, awsSessionToken),
 	}))
 
-	manager = NewTransactionManager(&failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}, integLockTableName, integImagesTableName)
+	manager = NewTransactionManager(&failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}, integLockTableName, integImagesTableName, txTTLTimeout)
 
 	key0  map[string]*dynamodb.AttributeValue
 	item0 map[string]*dynamodb.AttributeValue
@@ -1086,7 +1088,7 @@ func TestShouldNotCommitAfterRollback(t *testing.T) {
 			t.Fatalf("%v", err)
 		}
 		t1Client := &failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}
-		t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName)
+		t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLTimeout)
 		t1, err := t1Manager.newTransaction()
 		if err != nil {
 			t.Fatalf("%v", err)
@@ -1220,7 +1222,7 @@ func TestRollbackAfterReadLockUpgradeAttempt(t *testing.T) {
 	// Now start another transaction that is going to try to read that same item,
 	// but stop after you read the competing transaction record (don't try to roll it back yet).
 	t2Client := &failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}
-	t2Manager := NewTransactionManager(t2Client, integLockTableName, integImagesTableName)
+	t2Manager := NewTransactionManager(t2Client, integLockTableName, integImagesTableName, txTTLTimeout)
 	t2, err := t2Manager.newTransaction()
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -1303,7 +1305,7 @@ func TestCommitCleanupFailedUnlockItemAfterCommit(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	t1Client := &failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}
-	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName)
+	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLTimeout)
 	t1, err := t1Manager.newTransaction()
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -1366,7 +1368,7 @@ func TestRollbackCleanupFailedUnlockItemAfterCommit(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	t1Client := &failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}
-	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName)
+	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLTimeout)
 	t1, err := t1Manager.newTransaction()
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -1404,7 +1406,7 @@ func TestRollbackCleanupFailedUnlockItemAfterCommit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := Sweep(txItem.txItem, manager, 0, true); err != nil {
+	if err := manager.Sweep(txItem.txItem, 0, true); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := assertItemNotLocked(assertItemNotLockedArg{tableName: integHashTableName, key: key1, expected: item1, shouldExist: true}); err != nil {
@@ -1513,7 +1515,7 @@ func TestEmptyTransaction(t *testing.T) {
 	if err := t1.commit(); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := Sweep(t1.txItem.txItem, manager, 0, true); err != nil {
+	if err := manager.Sweep(t1.txItem.txItem, 0, true); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := assertTransactionDeleted(t1); err != nil {
@@ -1830,7 +1832,7 @@ func TestSweepCleansUpImages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := Sweep(txItemReloaded.txItem, manager, 0, true); err != nil {
+	if err := manager.Sweep(txItemReloaded.txItem, 0, true); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := assertImagesTableEmpty(); err != nil {
@@ -2071,8 +2073,8 @@ func assertTransactionDeleted(tx *Transaction) error {
 	if err != nil {
 		return fmt.Errorf("GetItem %v", err)
 	}
-	if resp.Item != nil {
-		return fmt.Errorf("found transaction %+v", resp)
+	if _, err := ttlFromItem(resp.Item); err != nil {
+		return errors.Wrap(err, fmt.Sprintf("ttlFromItem %+v", resp))
 	}
 	return nil
 }
@@ -2086,10 +2088,27 @@ func assertImagesTableEmpty() error {
 	if err != nil {
 		return errors.Wrap(err, "Scan")
 	}
-	if len(output.Items) != 0 {
-		return fmt.Errorf("transaction items table not empty %+v", output)
+	for _, item := range output.Items {
+		if _, err := ttlFromItem(item); err != nil {
+			return errors.Wrap(err, "ttlFromItem")
+		}
 	}
 	return nil
+}
+
+func ttlFromItem(item map[string]*dynamodb.AttributeValue) (int, error) {
+	ttlAV, ok := item[AttributeNameTTL]
+	if !ok {
+		return -1, fmt.Errorf("no AttributeNameTTL %+v", item)
+	}
+	if ttlAV.N == nil {
+		return -1, fmt.Errorf("AttributeNameTTL is nil %+v", item)
+	}
+	ttl, err := strconv.Atoi(*ttlAV.N)
+	if err != nil {
+		return -1, errors.Wrap(err, "strconv.Atoi")
+	}
+	return ttl, nil
 }
 
 func newKey(tableName string) map[string]*dynamodb.AttributeValue {

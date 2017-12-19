@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -55,6 +54,11 @@ const (
 	// An item image is a snapshot of an item when a transaction begins.
 	// It is also the state in which an item is revert to should a transaction rolls back.
 	AttributeNameImageID = TxAttrPrefix + "I"
+
+	// AttributeNameTTL is the Time To Live of a transaction.
+	// Instead of an immediate removal, the deletion of a transaction
+	// is done by setting its TTL.
+	AttributeNameTTL = TxAttrPrefix + "L"
 
 	booleanTrueAttrVal = "1"
 )
@@ -179,51 +183,6 @@ func (tx *Transaction) GetItem(input *dynamodb.GetItemInput) (*dynamodb.GetItemO
 		return nil, err
 	}
 	return res, nil
-}
-
-// Sweep cleans up failed transactions.
-// Transactions whose last updated time plus rollbackDuration have passed are rolledback.
-// It is important to choose a rollbackDuration that is long enough to guarantee that there are no coordinators working on the transaction when Sweep is called.
-// Failing to do so might result in inconsistent item states.
-// If shouldDel is true, the transaction is deleted after the transaction is successfully rolledback.
-//
-// A typical use case of this function is in the context of a background cleanup job.
-// The job would scan the transactions table, and for each transaction item it encounters,
-// pass it to Sweep with an appropriate rollbackDuration value,
-// depending on the characteristics of the application.
-func Sweep(txAttrs map[string]*dynamodb.AttributeValue, manager *TransactionManager, rollbackDuration time.Duration, shouldDel bool) error {
-	txItem, err := newTransactionItemByItem(txAttrs, manager)
-	if err != nil {
-		return errors.Wrap(err, "newTransactionItemByItem")
-	}
-	lut, err := lastUpdateTime(txItem.txItem)
-	if err != nil {
-		return errors.Wrap(err, "lastUpdateTime")
-	}
-	state, err := txItem.getState()
-	if err != nil {
-		return errors.Wrap(err, "getState")
-	}
-
-	if state == TransactionItemStatePending && time.Now().Before(lut.Add(rollbackDuration)) {
-		return nil
-	}
-
-	tx := &Transaction{
-		txManager: manager,
-		txItem:    txItem,
-		Retrier:   newDefaultJitterExpBackoff(),
-	}
-	if err := rollback(tx); err != nil {
-		return errors.Wrap(err, "rollback")
-	}
-
-	if shouldDel {
-		if err := txItem.delete(); err != nil {
-			return errors.Wrap(err, "delete")
-		}
-	}
-	return nil
 }
 
 func (tx *Transaction) commit() error {

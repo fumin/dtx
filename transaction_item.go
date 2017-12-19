@@ -210,14 +210,21 @@ func (txItem *transactionItem) finish(targetState string) error {
 	return nil
 }
 
-func (txItem *transactionItem) delete() error {
-	input := &dynamodb.DeleteItemInput{
+func (txItem *transactionItem) delete(timeout time.Duration) error {
+	ttl := time.Now().Add(timeout)
+	ttlStr := fmt.Sprintf("%d", ttl.Unix())
+	esk := make(map[string]*dynamodb.AttributeValue)
+	esk[":ttl"] = &dynamodb.AttributeValue{N: aws.String(ttlStr)}
+	updateExpr := fmt.Sprintf("SET %s = :ttl", AttributeNameTTL)
+	input := &dynamodb.UpdateItemInput{
 		TableName: &txItem.txManager.transactionTableName,
 		Key:       txItem.txKey,
+		ExpressionAttributeValues: esk,
+		UpdateExpression:          &updateExpr,
 	}
-	_, err := txItem.txManager.client.DeleteItem(input)
+	_, err := txItem.txManager.client.UpdateItem(input)
 	if err != nil {
-		return errors.Wrap(err, "DeleteItem")
+		return errors.Wrap(err, "UpdateItem")
 	}
 	return nil
 }

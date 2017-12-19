@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -25,16 +26,25 @@ func TestRunInTransactionSucceed(t *testing.T) {
 		Item:      item,
 	}
 
+	txID := ""
 	err := manager.RunInTransaction(func(tx *Transaction) error {
+		txID = tx.ID()
 		tx.PutItem(input)
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("%+v", err)
+	}
+	txState, _, err := manager.TransactionInfo(txID)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if txState != TransactionItemStateCommitted {
+		t.Fatalf("%s is not committed", txState)
 	}
 
 	if err := assertItemNotLocked(assertItemNotLockedArg{tableName: integHashTableName, key: key, expected: item, shouldExist: true}); err != nil {
-		t.Fatalf("%v", err)
+		t.Fatalf("%+v", err)
 	}
 }
 
@@ -53,7 +63,9 @@ func TestRunInTransactionFailByUser(t *testing.T) {
 		Item:      item,
 	}
 
+	txID := ""
 	err := manager.RunInTransaction(func(tx *Transaction) error {
+		txID = tx.ID()
 		tx.PutItem(input)
 		return fmt.Errorf("fail by user")
 	})
@@ -62,6 +74,13 @@ func TestRunInTransactionFailByUser(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "fail by user") {
 		t.Fatalf("wrong err %v", err)
+	}
+	txState, _, err := manager.TransactionInfo(txID)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if txState != TransactionItemStateRolledBack {
+		t.Fatalf("%s is not committed", txState)
 	}
 
 	if err := assertItemNotLocked(assertItemNotLockedArg{tableName: integHashTableName, key: key, shouldExist: false}); err != nil {
@@ -91,7 +110,8 @@ func TestRunInTransactionFail(t *testing.T) {
 		}
 		return true, nil, fmt.Errorf("failed your request")
 	}
-	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName)
+	ttlTimeout := 24 * time.Hour
+	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, ttlTimeout)
 	err := t1Manager.RunInTransaction(func(tx *Transaction) error {
 		tx.PutItem(input)
 		return nil

@@ -50,16 +50,19 @@ type TransactionManager struct {
 	client               dynamodbiface.DynamoDBAPI
 	transactionTableName string
 	itemImageTableName   string
+	ttlTimeout           time.Duration
 	tableSchemaCache     map[string][]*dynamodb.KeySchemaElement
 }
 
-// NewTransactionManager creates a TransactionManager,
-// given a DynamoDB client, and the names of the transaction and transaction item image tables.
-func NewTransactionManager(client dynamodbiface.DynamoDBAPI, transactionTableName string, itemImageTableName string) *TransactionManager {
+// NewTransactionManager creates a TransactionManager, given a DynamoDB client,
+// the names of the transaction and transaction item image tables,
+// and the Time To Live timeout when deleting transactions.
+func NewTransactionManager(client dynamodbiface.DynamoDBAPI, transactionTableName string, itemImageTableName string, ttlTimeout time.Duration) *TransactionManager {
 	mg := TransactionManager{
 		client:               client,
 		transactionTableName: transactionTableName,
 		itemImageTableName:   itemImageTableName,
+		ttlTimeout:           ttlTimeout,
 	}
 	mg.tableSchemaCache = make(map[string][]*dynamodb.KeySchemaElement)
 	return &mg
@@ -79,7 +82,7 @@ func (mg *TransactionManager) RunInTransaction(ops func(tx *Transaction) error) 
 	if err != nil {
 		rollbackErr := rollback(tx)
 		if rollbackErr == nil {
-			tx.txItem.delete()
+			tx.txItem.delete(mg.ttlTimeout)
 		}
 		return err
 	}
@@ -88,12 +91,57 @@ func (mg *TransactionManager) RunInTransaction(ops func(tx *Transaction) error) 
 	if commitErr != nil {
 		rollbackErr := rollback(tx)
 		if rollbackErr == nil {
-			tx.txItem.delete()
+			tx.txItem.delete(mg.ttlTimeout)
 		}
 		return errors.Wrap(commitErr, "commit")
 	}
 
-	tx.txItem.delete()
+	tx.txItem.delete(mg.ttlTimeout)
+	return nil
+}
+
+// Sweep cleans up failed transactions.
+// Transactions whose last updated time plus rollbackDuration have passed are rolledback.
+// It is important to choose a rollbackDuration that is long enough to guarantee that there are no coordinators working on the transaction when Sweep is called.
+// Failing to do so might result in inconsistent item states.
+// If shouldDel is true, the transaction is deleted after the transaction is successfully rolledback.
+//
+// A typical use case of this function is in the context of a background cleanup job.
+// The job would scan the transactions table, and for each transaction item it encounters,
+// pass it to Sweep with an appropriate rollbackDuration value,
+// depending on the characteristics of the application.
+func (mg *TransactionManager) Sweep(txAttrs map[string]*dynamodb.AttributeValue, rollbackDuration time.Duration, shouldDel bool) error {
+	txItem, err := newTransactionItemByItem(txAttrs, mg)
+	if err != nil {
+		return errors.Wrap(err, "newTransactionItemByItem")
+	}
+	lut, err := lastUpdateTime(txItem.txItem)
+	if err != nil {
+		return errors.Wrap(err, "lastUpdateTime")
+	}
+	state, err := txItem.getState()
+	if err != nil {
+		return errors.Wrap(err, "getState")
+	}
+
+	if state == TransactionItemStatePending && time.Now().Before(lut.Add(rollbackDuration)) {
+		return nil
+	}
+
+	tx := &Transaction{
+		txManager: mg,
+		txItem:    txItem,
+		Retrier:   newDefaultJitterExpBackoff(),
+	}
+	if err := rollback(tx); err != nil {
+		return errors.Wrap(err, "rollback")
+	}
+
+	if shouldDel {
+		if err := txItem.delete(mg.ttlTimeout); err != nil {
+			return errors.Wrap(err, "delete")
+		}
+	}
 	return nil
 }
 
@@ -140,6 +188,30 @@ func (mg *TransactionManager) Query(input *dynamodb.QueryInput) (*dynamodb.Query
 
 	output.Items = nilFiltered
 	return output, nil
+}
+
+// TransactionInfo returns information about a transaction given its ID.
+// This information contains the state of the transaction as well as
+// it's last updated time whose semantics are described below:
+//
+// If txState is TransactionItemStatePending, txTime is the transaction's
+// creation time, or the time its last read or write request is issued.
+// If txState is TransactionItemStateCommitted, txTime is the transaction's commit time.
+// If txState is TransactionItemStateRolledBack, txTime is the transaction's rollback time.
+func (mg *TransactionManager) TransactionInfo(id string) (txState string, txTime time.Time, err error) {
+	txItem, err := newTransactionItem(id, manager, false)
+	if err != nil {
+		return "", time.Unix(0, 0), errors.Wrap(err, "newTransactionItem")
+	}
+	txState, err = txItem.getState()
+	if err != nil {
+		return "", time.Unix(0, 0), errors.Wrap(err, "getState")
+	}
+	txTime, err = lastUpdateTime(txItem.txItem)
+	if err != nil {
+		return "", time.Unix(0, 0), errors.Wrap(err, "lastUpdateTime")
+	}
+	return txState, txTime, nil
 }
 
 func (mg *TransactionManager) newTransaction() (*Transaction, error) {
