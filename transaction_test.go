@@ -175,7 +175,7 @@ func TestPhantomItemFromDelete(t *testing.T) {
 	}
 
 	// Although, the item did not exist, it is nonetheless created to hold the lock.
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: transaction.ID(), isTransient: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: transaction.ID(), isTransient: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestLockItem(t *testing.T) {
 		t.Fatalf("item should not exists %+v", getResult)
 	}
 	// we're not applying locks, isApplied is false.
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -232,7 +232,7 @@ func TestLockItem(t *testing.T) {
 		t.Fatalf("item should not exists %+v", deleteResult)
 	}
 	// we're not applying locks, isApplied is false.
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t2.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t2.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -288,7 +288,7 @@ func TestLock2Items(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: false, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: false, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := attributeValueMapEqual(getResult1.Item, item1); err != nil {
@@ -303,10 +303,10 @@ func TestLock2Items(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: false, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: false, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key2, owner: t1.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key2, owner: t1.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if getResult2.Item != nil {
@@ -346,7 +346,7 @@ func TestGetItemNotExists(t *testing.T) {
 	if getResult1.Item != nil {
 		t.Fatalf("item should not exists %+v", getResult1)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -357,7 +357,7 @@ func TestGetItemNotExists(t *testing.T) {
 	if getResult2.Item != nil {
 		t.Fatalf("item should not exists %+v", getResult2)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -396,7 +396,7 @@ func TestGetThenUpdateNewItem(t *testing.T) {
 	if getResult1.Item != nil {
 		t.Fatalf("item should not exists %+v", getResult1)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -422,7 +422,7 @@ func TestGetThenUpdateNewItem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := attributeValueMapEqual(updateResult.Attributes, item1); err != nil {
@@ -454,7 +454,7 @@ func TestGetThenUpdateExistingItem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, owner: t1.ID(), isTransient: false, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, owner: t1.ID(), isTransient: false, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := attributeValueMapEqual(getResult.Item, item0); err != nil {
@@ -480,7 +480,7 @@ func TestGetThenUpdateExistingItem(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, owner: t1.ID(), isTransient: false, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, owner: t1.ID(), isTransient: false, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := attributeValueMapEqual(updateResult.Attributes, item0a); err != nil {
@@ -527,7 +527,7 @@ func TestConflictingWrites(t *testing.T) {
 	if _, err := t1.PutItem(t1PutInput); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := t1.commit(); err != nil {
@@ -551,7 +551,7 @@ func TestConflictingWrites(t *testing.T) {
 	if _, err := t2.PutItem(t2PutInput); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t2.ID(), isTransient: false, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t2.ID(), isTransient: false, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -569,7 +569,7 @@ func TestConflictingWrites(t *testing.T) {
 	if _, err := t3.PutItem(t3PutInput); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t3.ID(), isTransient: false, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t3.ID(), isTransient: false, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := t3.commit(); err != nil {
@@ -614,7 +614,7 @@ func TestFailValidationInApply(t *testing.T) {
 	if _, err := t1.UpdateItem(t1UpdateInput); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := t1.commit(); err != nil {
@@ -639,7 +639,7 @@ func TestFailValidationInApply(t *testing.T) {
 	if !strings.Contains(err.Error(), "An operand in the update expression has an incorrect data type") {
 		t.Fatalf("wrong error %v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key, owner: t2.ID(), isTransient: false, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key, owner: t2.ID(), isTransient: false, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -823,10 +823,10 @@ func TestDriveCommit(t *testing.T) {
 		t.Fatalf("key2 %s should not exist", key2)
 	}
 
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item, owner: t2.ID(), isTransient: false, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item, owner: t2.ID(), isTransient: false, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key2, expected: key2, owner: t2.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key2, expected: key2, owner: t2.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -933,13 +933,13 @@ func TestDriveRollback(t *testing.T) {
 		client.getFilter = nil
 		defer func() { client.getFilter = oriFilter }()
 
-		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1a, owner: t2.ID(), isTransient: false, isApplied: true, checkTxItem: true}); err != nil {
+		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1a, owner: t2.ID(), isTransient: false, isApplied: true}); err != nil {
 			return fmt.Errorf("key1 %v", err)
 		}
-		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key2, expected: item2, owner: t2.ID(), isTransient: false, isApplied: false, checkTxItem: true}); err != nil {
+		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key2, expected: item2, owner: t2.ID(), isTransient: false, isApplied: false}); err != nil {
 			return fmt.Errorf("key2 %v", err)
 		}
-		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key3, expected: key3, owner: t2.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key3, expected: key3, owner: t2.ID(), isTransient: true, isApplied: false}); err != nil {
 			return fmt.Errorf("key3 %v", err)
 		}
 		return nil
@@ -1012,7 +1012,7 @@ func TestResumeRollbackAfterTransientApplyFailure(t *testing.T) {
 		t.Fatalf("item1 should fail")
 	}
 	client.putFilter = nil
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: key1, owner: t1.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: key1, owner: t1.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := assertOldItemImage(assertOldItemImageArg{txID: t1.ID(), tableName: integHashTableName, key: key1, expected: key1, shouldExist: false}); err != nil {
@@ -1069,7 +1069,7 @@ func TestUnlockInRollbackIfNoItemImageSaved(t *testing.T) {
 	if _, err := t1.PutItem(putInput1); err == nil {
 		t.Fatalf("put item0a should fail")
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, expected: item0, owner: t1.ID(), isTransient: false, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, expected: item0, owner: t1.ID(), isTransient: false, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1156,7 +1156,7 @@ func TestShouldNotCommitAfterRollback(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%v", err)
 		}
-		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 			t.Fatalf("%v", err)
 		}
 
@@ -1183,7 +1183,7 @@ func TestShouldNotCommitAfterRollback(t *testing.T) {
 		if _, err := t3.PutItem(putInput3); err != nil {
 			t.Fatalf("%v", err)
 		}
-		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1a, owner: t3.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+		if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1a, owner: t3.ID(), isTransient: true, isApplied: true}); err != nil {
 			t.Fatalf("%v", err)
 		}
 		if err := t3.commit(); err != nil {
@@ -1215,7 +1215,7 @@ func TestRollbackAfterReadLockUpgradeAttempt(t *testing.T) {
 	if getResult1.Item != nil {
 		t.Fatalf("item should not exist")
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1334,7 +1334,7 @@ func TestCommitCleanupFailedUnlockItemAfterCommit(t *testing.T) {
 	if err := t1.commit(); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1397,7 +1397,7 @@ func TestRollbackCleanupFailedUnlockItemAfterCommit(t *testing.T) {
 	if err := t1.commit(); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1431,7 +1431,7 @@ func TestBasicNewItemRollback(t *testing.T) {
 	if _, err := t1.UpdateItem(updateInput); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1460,7 +1460,7 @@ func TestBasicNewItemCommit(t *testing.T) {
 	if _, err := t1.UpdateItem(updateInput); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1579,7 +1579,7 @@ func TestTooMuchDataInTransaction(t *testing.T) {
 	if _, err := t1.PutItem(putInput1); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 	if err := t1.commit(); err != nil {
@@ -1601,7 +1601,7 @@ func TestTooMuchDataInTransaction(t *testing.T) {
 	if _, err := t2.PutItem(putInput1a); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1a, owner: t2.ID(), isTransient: false, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1a, owner: t2.ID(), isTransient: false, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1625,7 +1625,7 @@ func TestTooMuchDataInTransaction(t *testing.T) {
 	if err := assertItemNotLocked(assertItemNotLockedArg{tableName: integHashTableName, key: key2, shouldExist: false}); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1a, owner: t2.ID(), isTransient: false, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, expected: item1a, owner: t2.ID(), isTransient: false, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1663,7 +1663,7 @@ func TestContainsBinaryAttributes(t *testing.T) {
 	if _, err := t1.PutItem(input); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key, expected: item, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key, expected: item, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1697,7 +1697,7 @@ func TestContainsJSONAttributes(t *testing.T) {
 	if _, err := t1.PutItem(input); err != nil {
 		t.Fatalf("%v", err)
 	}
-	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key, expected: item, owner: t1.ID(), isTransient: true, isApplied: true, checkTxItem: true}); err != nil {
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key, expected: item, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
 		t.Fatalf("%v", err)
 	}
 
@@ -1930,7 +1930,6 @@ type assertItemLockedArg struct {
 	owner       string
 	isTransient bool
 	isApplied   bool
-	checkTxItem bool
 }
 
 func assertItemLocked(arg assertItemLockedArg) error {
@@ -1991,24 +1990,23 @@ func assertItemLocked(arg assertItemLockedArg) error {
 		}
 	}
 
-	if arg.checkTxItem {
-		insert := false
-		txItem, err := newTransactionItem(arg.owner, manager, insert)
-		if err != nil {
-			return fmt.Errorf("newTransactionItem %v", err)
-		}
-		tbReqs, ok := txItem.requestsMap[arg.tableName]
-		if !ok {
-			return fmt.Errorf("no request for table %s %+v", arg.tableName, txItem)
-		}
-		immutableKey, err := toImmutableKey(arg.key)
-		if err != nil {
-			return fmt.Errorf("toImmutableKey %v", err)
-		}
-		if _, ok := tbReqs[immutableKey]; !ok {
-			return fmt.Errorf("no request for immutable key %s", immutableKey)
-		}
+	insert := false
+	txItem, err := newTransactionItem(arg.owner, manager, insert)
+	if err != nil {
+		return fmt.Errorf("newTransactionItem %v", err)
 	}
+	tbReqs, ok := txItem.requestsMap[arg.tableName]
+	if !ok {
+		return fmt.Errorf("no request for table %s %+v", arg.tableName, txItem)
+	}
+	immutableKey, err := toImmutableKey(arg.key)
+	if err != nil {
+		return fmt.Errorf("toImmutableKey %v", err)
+	}
+	if _, ok := tbReqs[immutableKey]; !ok {
+		return fmt.Errorf("no request for immutable key %s", immutableKey)
+	}
+
 	return nil
 }
 

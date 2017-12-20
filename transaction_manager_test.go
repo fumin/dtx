@@ -210,6 +210,83 @@ func TestInsertNotExists(t *testing.T) {
 	}
 }
 
+func TestRollbackOrCommit(t *testing.T) {
+	if err := setup(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	getInput := &dynamodb.GetItemInput{
+		TableName: aws.String(integHashTableName),
+		Key:       key0,
+	}
+	txID := func() (txID string) {
+		defer func() {
+			recover()
+		}()
+		manager.RunInTransaction(func(tx *Transaction) error {
+			txID = tx.ID()
+			tx.GetItem(getInput)
+			panic("machine failure")
+		})
+		return ""
+	}()
+	state, _, err := manager.TransactionInfo(txID)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if state != TransactionItemStatePending {
+		t.Fatalf("state %s not pending", state)
+	}
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, owner: txID, isTransient: false, isApplied: false}); err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	rolledback, err := manager.RollbackOrCommit(txID)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if !rolledback {
+		t.Fatalf("not rolled back")
+	}
+	if err := assertItemNotLocked(assertItemNotLockedArg{tableName: integHashTableName, key: key0, expected: item0, shouldExist: true}); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestRollbackOrCommitCommitted(t *testing.T) {
+	if err := setup(); err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	key1 := newKey(integHashTableName)
+	updateInput := &dynamodb.UpdateItemInput{
+		TableName: aws.String(integHashTableName),
+		Key:       key1,
+	}
+	txID := ""
+	err := manager.RunInTransaction(func(tx *Transaction) error {
+		txID = tx.ID()
+		if _, err := tx.UpdateItem(updateInput); err != nil {
+			return errors.Wrap(err, "UpdateItem")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+
+	rolledback, err := manager.RollbackOrCommit(txID)
+	if err != nil {
+		t.Fatalf("%+v", err)
+	}
+	if rolledback {
+		t.Fatalf("rolled back")
+	}
+	if err := assertItemNotLocked(assertItemNotLockedArg{tableName: integHashTableName, key: key1, expected: key1, shouldExist: true}); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestQuery(t *testing.T) {
 	if err := setup(); err != nil {
 		t.Fatalf("%+v", err)

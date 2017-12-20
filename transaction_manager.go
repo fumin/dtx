@@ -138,7 +138,7 @@ func (mg *TransactionManager) Sweep(txAttrs map[string]*dynamodb.AttributeValue,
 	}
 
 	if shouldDel {
-		if err := txItem.delete(mg.ttlTimeout); err != nil {
+		if err := tx.txItem.delete(mg.ttlTimeout); err != nil {
 			return errors.Wrap(err, "delete")
 		}
 	}
@@ -188,6 +188,41 @@ func (mg *TransactionManager) Query(input *dynamodb.QueryInput) (*dynamodb.Query
 
 	output.Items = nilFiltered
 	return output, nil
+}
+
+// RollbackOrCommit attempts to rollback a transaction.
+// Note that it is possible that the transaction is being committed in between
+// the time RollbackOrCommit is called and the rollback is attempted.
+// In this case, RollbackOrCommit returns false without errors.
+// On the other hand, if the rollback is successful, RollbackOrCommit returns true.
+func (mg *TransactionManager) RollbackOrCommit(id string) (bool, error) {
+	txItem, err := newTransactionItem(id, mg, false)
+	if err != nil {
+		return false, errors.Wrap(err, "newTransactionItem")
+	}
+	tx := &Transaction{
+		txManager: mg,
+		txItem:    txItem,
+		Retrier:   newJitterExpBackoff(),
+	}
+
+	if err := rollback(tx); err != nil {
+		return false, errors.Wrap(err, "rollback")
+	}
+	if err := tx.txItem.delete(mg.ttlTimeout); err != nil {
+		return false, errors.Wrap(err, "delete")
+	}
+
+	state, err := tx.txItem.getState()
+	if err != nil {
+		return false, errors.Wrap(err, "getState")
+	}
+	if state == TransactionItemStateRolledBack {
+		return true, nil
+	} else if state == TransactionItemStateCommitted {
+		return false, nil
+	}
+	return false, errors.Wrap(err, fmt.Sprintf("unknown state", state))
 }
 
 // TransactionInfo returns information about a transaction given its ID.
