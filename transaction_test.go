@@ -737,7 +737,7 @@ func TestUseRolledBackTransaction(t *testing.T) {
 	t1Resumed := &Transaction{
 		txManager: manager,
 		txItem:    t1ResumedTxItem,
-		Retrier:   newDefaultJitterExpBackoff(),
+		Retrier:   newJitterExpBackoff(),
 	}
 	if err := deleteItem(t1Resumed); err == nil {
 		t.Fatalf("rolled back transaction should not be used")
@@ -760,7 +760,7 @@ func TestUseRolledBackTransaction(t *testing.T) {
 	t2Resumed := &Transaction{
 		txManager: manager,
 		txItem:    t2ResumedTxItem,
-		Retrier:   newDefaultJitterExpBackoff(),
+		Retrier:   newJitterExpBackoff(),
 	}
 	if err := t2Resumed.commit(); err == nil {
 		t.Fatalf("rolled back transaction should not be committed")
@@ -1026,7 +1026,7 @@ func TestResumeRollbackAfterTransientApplyFailure(t *testing.T) {
 	t3 := &Transaction{
 		txManager: manager,
 		txItem:    t3TxItem,
-		Retrier:   newDefaultJitterExpBackoff(),
+		Retrier:   newJitterExpBackoff(),
 	}
 	if err := rollback(t3); err != nil {
 		t.Fatalf("%v", err)
@@ -1141,7 +1141,7 @@ func TestShouldNotCommitAfterRollback(t *testing.T) {
 		t2 := &Transaction{
 			txManager: manager,
 			txItem:    txItem2,
-			Retrier:   newDefaultJitterExpBackoff(),
+			Retrier:   newJitterExpBackoff(),
 		}
 		if err := rollback(t2); err != nil {
 			t.Fatalf("%v", err)

@@ -49,10 +49,10 @@ package dtx
 
 import (
 	"fmt"
-	"math"
-	"math/rand"
 	"strconv"
 	"time"
+
+	"github.com/fumin/dtx/backoff"
 )
 
 var (
@@ -102,48 +102,12 @@ type Retrier interface {
 	Wait() bool
 }
 
-// https://www.awsarchitectureblog.com/2015/03/backoff.html
-type jitterExpBackoff struct {
-	attempt int
-	base    float64
-	unit    time.Duration
-
-	waitTime    time.Duration
-	maxWaitTime time.Duration
-}
-
-func newDefaultJitterExpBackoff() *jitterExpBackoff {
-	r := &jitterExpBackoff{
-		base:        backoffDefaultBase,
-		unit:        backoffDefaultUnit,
-		maxWaitTime: backoffDefaultMaxWaitTime,
-	}
+func newJitterExpBackoff() *backoff.JitterExp {
+	var base float64 = 2
+	unit := 200 * time.Millisecond
+	maxWaitTime := 10 * time.Second
+	r := backoff.NewJitterExp(base, unit, maxWaitTime)
 	return r
-}
-
-func (r *jitterExpBackoff) Reset() {
-	r.attempt = -1
-	r.waitTime = 0
-}
-
-func (r *jitterExpBackoff) Wait() bool {
-	available := r.maxWaitTime - r.waitTime
-	if available < time.Microsecond {
-		return false
-	}
-
-	r.attempt++
-	max := math.Pow(r.base, float64(r.attempt))
-	jitter := rand.Float64() * max
-	d := r.unit * time.Duration(jitter)
-	if d > available {
-		d = available
-	}
-
-	r.waitTime += d
-	<-time.After(d)
-
-	return true
 }
 
 func timeToStr(t time.Time) string {

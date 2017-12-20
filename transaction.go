@@ -885,7 +885,7 @@ func getItemTx(txManager *TransactionManager, req txRequest) (map[string]*dynamo
 	tx := &Transaction{
 		txManager: txManager,
 		txItem:    ownerTxItem,
-		Retrier:   newDefaultJitterExpBackoff(),
+		Retrier:   newJitterExpBackoff(),
 	}
 	return item, tx, nil
 }

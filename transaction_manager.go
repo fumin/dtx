@@ -131,7 +131,7 @@ func (mg *TransactionManager) Sweep(txAttrs map[string]*dynamodb.AttributeValue,
 	tx := &Transaction{
 		txManager: mg,
 		txItem:    txItem,
-		Retrier:   newDefaultJitterExpBackoff(),
+		Retrier:   newJitterExpBackoff(),
 	}
 	if err := rollback(tx); err != nil {
 		return errors.Wrap(err, "rollback")
@@ -199,7 +199,7 @@ func (mg *TransactionManager) Query(input *dynamodb.QueryInput) (*dynamodb.Query
 // If txState is TransactionItemStateCommitted, txTime is the transaction's commit time.
 // If txState is TransactionItemStateRolledBack, txTime is the transaction's rollback time.
 func (mg *TransactionManager) TransactionInfo(id string) (txState string, txTime time.Time, err error) {
-	txItem, err := newTransactionItem(id, manager, false)
+	txItem, err := newTransactionItem(id, mg, false)
 	if err != nil {
 		return "", time.Unix(0, 0), errors.Wrap(err, "newTransactionItem")
 	}
@@ -222,7 +222,7 @@ func (mg *TransactionManager) newTransaction() (*Transaction, error) {
 	tx := &Transaction{
 		txManager: mg,
 		txItem:    item,
-		Retrier:   newDefaultJitterExpBackoff(),
+		Retrier:   newJitterExpBackoff(),
 	}
 	return tx, nil
 }
