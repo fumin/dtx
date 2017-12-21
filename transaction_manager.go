@@ -50,19 +50,19 @@ type TransactionManager struct {
 	client               dynamodbiface.DynamoDBAPI
 	transactionTableName string
 	itemImageTableName   string
-	ttlTimeout           time.Duration
+	ttlDuration          time.Duration
 	tableSchemaCache     map[string][]*dynamodb.KeySchemaElement
 }
 
 // NewTransactionManager creates a TransactionManager, given a DynamoDB client,
 // the names of the transaction and transaction item image tables,
-// and the Time To Live timeout when deleting transactions.
-func NewTransactionManager(client dynamodbiface.DynamoDBAPI, transactionTableName string, itemImageTableName string, ttlTimeout time.Duration) *TransactionManager {
+// and the Time To Live duration when deleting transactions.
+func NewTransactionManager(client dynamodbiface.DynamoDBAPI, transactionTableName string, itemImageTableName string, ttlDuration time.Duration) *TransactionManager {
 	mg := TransactionManager{
 		client:               client,
 		transactionTableName: transactionTableName,
 		itemImageTableName:   itemImageTableName,
-		ttlTimeout:           ttlTimeout,
+		ttlDuration:          ttlDuration,
 	}
 	mg.tableSchemaCache = make(map[string][]*dynamodb.KeySchemaElement)
 	return &mg
@@ -82,7 +82,7 @@ func (mg *TransactionManager) RunInTransaction(ops func(tx *Transaction) error) 
 	if err != nil {
 		rollbackErr := rollback(tx)
 		if rollbackErr == nil {
-			tx.txItem.delete(mg.ttlTimeout)
+			tx.txItem.delete(mg.ttlDuration)
 		}
 		return err
 	}
@@ -91,12 +91,12 @@ func (mg *TransactionManager) RunInTransaction(ops func(tx *Transaction) error) 
 	if commitErr != nil {
 		rollbackErr := rollback(tx)
 		if rollbackErr == nil {
-			tx.txItem.delete(mg.ttlTimeout)
+			tx.txItem.delete(mg.ttlDuration)
 		}
 		return errors.Wrap(commitErr, "commit")
 	}
 
-	tx.txItem.delete(mg.ttlTimeout)
+	tx.txItem.delete(mg.ttlDuration)
 	return nil
 }
 
@@ -138,7 +138,7 @@ func (mg *TransactionManager) Sweep(txAttrs map[string]*dynamodb.AttributeValue,
 	}
 
 	if shouldDel {
-		if err := tx.txItem.delete(mg.ttlTimeout); err != nil {
+		if err := tx.txItem.delete(mg.ttlDuration); err != nil {
 			return errors.Wrap(err, "delete")
 		}
 	}
@@ -209,7 +209,7 @@ func (mg *TransactionManager) RollbackOrCommit(id string) (bool, error) {
 	if err := rollback(tx); err != nil {
 		return false, errors.Wrap(err, "rollback")
 	}
-	if err := tx.txItem.delete(mg.ttlTimeout); err != nil {
+	if err := tx.txItem.delete(mg.ttlDuration); err != nil {
 		return false, errors.Wrap(err, "delete")
 	}
 

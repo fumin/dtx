@@ -210,8 +210,8 @@ func (txItem *transactionItem) finish(targetState string) error {
 	return nil
 }
 
-func (txItem *transactionItem) delete(timeout time.Duration) error {
-	ttl := time.Now().Add(timeout)
+func (txItem *transactionItem) delete(ttlDuration time.Duration) error {
+	ttl := time.Now().Add(ttlDuration)
 	ttlStr := fmt.Sprintf("%d", ttl.Unix())
 	esk := make(map[string]*dynamodb.AttributeValue)
 	esk[":ttl"] = &dynamodb.AttributeValue{N: aws.String(ttlStr)}

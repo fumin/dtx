@@ -19,8 +19,8 @@ import (
 
 const (
 	// The transaction table
-	txTableName  = "txTableName"
-	txTTLTimeout = 24 * time.Hour
+	txTableName   = "txTableName"
+	txTTLDuration = 24 * time.Hour
 	// The transaction item image table
 	txImageTableName = "txImageTableName"
 
@@ -56,7 +56,7 @@ var (
 		Credentials: credentials.NewStaticCredentials(awsAccessKeyID, awsSecretAccessKey, awsSessionToken),
 	}))
 	client  = dynamodb.New(sess)
-	manager = dtx.NewTransactionManager(client, txTableName, txImageTableName, txTTLTimeout)
+	manager = dtx.NewTransactionManager(client, txTableName, txImageTableName, txTTLDuration)
 )
 
 // This example demonstrates the use of transactions in enforcing a rule in a bank which states that all accounts must have a positive balance.

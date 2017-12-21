@@ -26,7 +26,7 @@ const (
 	maxItemSizeBytes = 1024 * 400 // 400kb
 
 	integLockTableName   = "dtxIntegLockTableName"
-	txTTLTimeout         = 24 * time.Hour
+	txTTLDuration        = 24 * time.Hour
 	integImagesTableName = "dtxIntegImagesTableName"
 
 	integHashTableName  = "dtxIntegHashTableName"
@@ -42,7 +42,7 @@ var (
 		Credentials: credentials.NewStaticCredentials(awsAccessKeyID, awsSecretAccessKey, awsSessionToken),
 	}))
 
-	manager = NewTransactionManager(&failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}, integLockTableName, integImagesTableName, txTTLTimeout)
+	manager = NewTransactionManager(&failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}, integLockTableName, integImagesTableName, txTTLDuration)
 
 	key0  map[string]*dynamodb.AttributeValue
 	item0 map[string]*dynamodb.AttributeValue
@@ -1088,7 +1088,7 @@ func TestShouldNotCommitAfterRollback(t *testing.T) {
 			t.Fatalf("%v", err)
 		}
 		t1Client := &failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}
-		t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLTimeout)
+		t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLDuration)
 		t1, err := t1Manager.newTransaction()
 		if err != nil {
 			t.Fatalf("%v", err)
@@ -1222,7 +1222,7 @@ func TestRollbackAfterReadLockUpgradeAttempt(t *testing.T) {
 	// Now start another transaction that is going to try to read that same item,
 	// but stop after you read the competing transaction record (don't try to roll it back yet).
 	t2Client := &failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}
-	t2Manager := NewTransactionManager(t2Client, integLockTableName, integImagesTableName, txTTLTimeout)
+	t2Manager := NewTransactionManager(t2Client, integLockTableName, integImagesTableName, txTTLDuration)
 	t2, err := t2Manager.newTransaction()
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -1305,7 +1305,7 @@ func TestCommitCleanupFailedUnlockItemAfterCommit(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	t1Client := &failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}
-	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLTimeout)
+	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLDuration)
 	t1, err := t1Manager.newTransaction()
 	if err != nil {
 		t.Fatalf("%v", err)
@@ -1368,7 +1368,7 @@ func TestRollbackCleanupFailedUnlockItemAfterCommit(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 	t1Client := &failingAmazonDynamodbClient{DynamoDB: dynamodb.New(sess)}
-	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLTimeout)
+	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, txTTLDuration)
 	t1, err := t1Manager.newTransaction()
 	if err != nil {
 		t.Fatalf("%v", err)

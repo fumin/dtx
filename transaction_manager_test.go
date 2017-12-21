@@ -110,8 +110,8 @@ func TestRunInTransactionFail(t *testing.T) {
 		}
 		return true, nil, fmt.Errorf("failed your request")
 	}
-	ttlTimeout := 24 * time.Hour
-	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, ttlTimeout)
+	ttlDuration := 24 * time.Hour
+	t1Manager := NewTransactionManager(t1Client, integLockTableName, integImagesTableName, ttlDuration)
 	err := t1Manager.RunInTransaction(func(tx *Transaction) error {
 		tx.PutItem(input)
 		return nil
