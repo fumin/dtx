@@ -438,6 +438,74 @@ func TestGetThenUpdateNewItem(t *testing.T) {
 	}
 }
 
+func TestGetExpectNotExistThenUpdateNewItem(t *testing.T) {
+	if err := setup(); err != nil {
+		t.Fatalf("%v", err)
+	}
+	t1, err := manager.newTransaction()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	key1 := newKey(integHashTableName)
+	item1 := make(map[string]*dynamodb.AttributeValue)
+	for k, v := range key1 {
+		item1[k] = v
+	}
+	item1["asdf"] = &dynamodb.AttributeValue{S: aws.String("did not exist")}
+
+	getRequest := &dynamodb.GetItemInput{
+		TableName: aws.String(integHashTableName),
+		Key:       key1,
+	}
+	getResult1, err := t1.GetItemExpectNotExist(getRequest)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if getResult1.Item != nil {
+		t.Fatalf("item should not exists %+v", getResult1)
+	}
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: false}); err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	eav := make(map[string]*dynamodb.AttributeValue)
+	sets := make([]string, 0, len(item1))
+	for k, v := range item1 {
+		if _, ok := key1[k]; ok {
+			continue
+		}
+		exprName := fmt.Sprintf(":%s", k)
+		eav[exprName] = v
+		sets = append(sets, fmt.Sprintf("%s = %s", k, exprName))
+	}
+	updateExpr := fmt.Sprintf("SET %s", strings.Join(sets, ", "))
+	updateInput := &dynamodb.UpdateItemInput{
+		TableName: aws.String(integHashTableName),
+		Key:       key1,
+		ExpressionAttributeValues: eav,
+		UpdateExpression:          &updateExpr,
+		ReturnValues:              aws.String("ALL_NEW"),
+	}
+	updateResult, err := t1.UpdateItem(updateInput)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key1, owner: t1.ID(), isTransient: true, isApplied: true}); err != nil {
+		t.Fatalf("%v", err)
+	}
+	if err := attributeValueMapEqual(updateResult.Attributes, item1); err != nil {
+		t.Fatalf("attributeValueMapEqual %v", err)
+	}
+
+	if err := t1.commit(); err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	if err := assertItemNotLocked(assertItemNotLockedArg{tableName: integHashTableName, key: key1, expected: item1, shouldExist: true}); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestGetThenUpdateExistingItem(t *testing.T) {
 	if err := setup(); err != nil {
 		t.Fatalf("%v", err)
@@ -451,6 +519,64 @@ func TestGetThenUpdateExistingItem(t *testing.T) {
 		Key:       key0,
 	}
 	getResult, err := t1.GetItem(getInput)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, owner: t1.ID(), isTransient: false, isApplied: false}); err != nil {
+		t.Fatalf("%v", err)
+	}
+	if err := attributeValueMapEqual(getResult.Item, item0); err != nil {
+		t.Fatalf("attributeValueMapEqual %v", err)
+	}
+
+	item0a := make(map[string]*dynamodb.AttributeValue)
+	for k, v := range item0 {
+		item0a[k] = v
+	}
+	item0a["wef"] = &dynamodb.AttributeValue{S: aws.String("new_attr")}
+	eav := make(map[string]*dynamodb.AttributeValue)
+	eav[":wef"] = item0a["wef"]
+	updateExpr := aws.String("SET wef = :wef")
+	updateInput := &dynamodb.UpdateItemInput{
+		TableName: aws.String(integHashTableName),
+		Key:       key0,
+		ExpressionAttributeValues: eav,
+		UpdateExpression:          updateExpr,
+		ReturnValues:              aws.String("ALL_NEW"),
+	}
+	updateResult, err := t1.UpdateItem(updateInput)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if err := assertItemLocked(assertItemLockedArg{tableName: integHashTableName, key: key0, owner: t1.ID(), isTransient: false, isApplied: true}); err != nil {
+		t.Fatalf("%v", err)
+	}
+	if err := attributeValueMapEqual(updateResult.Attributes, item0a); err != nil {
+		t.Fatalf("attributeValueMapEqual %v", err)
+	}
+
+	if err := t1.commit(); err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	if err := assertItemNotLocked(assertItemNotLockedArg{tableName: integHashTableName, key: key0, expected: item0a, shouldExist: true}); err != nil {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestGetExpectNotExistThenUpdateExistingItem(t *testing.T) {
+	if err := setup(); err != nil {
+		t.Fatalf("%v", err)
+	}
+	t1, err := manager.newTransaction()
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	getInput := &dynamodb.GetItemInput{
+		TableName: aws.String(integHashTableName),
+		Key:       key0,
+	}
+	getResult, err := t1.GetItemExpectNotExist(getInput)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}

@@ -31,7 +31,7 @@ func NewJitterExp(base float64, unit, maxTotalWaitTime time.Duration) *JitterExp
 
 // Reset resets the retry attempt counters so that the backoff restarts.
 func (je *JitterExp) Reset() {
-	je.attempt = -1
+	je.attempt = -2
 	je.waitTime = 0
 }
 
@@ -44,6 +44,10 @@ func (je *JitterExp) Wait() bool {
 	}
 
 	je.attempt++
+	if je.attempt < 0 {
+		return true
+	}
+
 	max := math.Pow(je.base, float64(je.attempt))
 	jitter := rand.Float64() * max
 	d := je.unit * time.Duration(jitter)

@@ -127,7 +127,7 @@ func (tx *Transaction) PutItem(input *dynamodb.PutItemInput) (*dynamodb.PutItemO
 		return nil, tx.txErr
 	}
 
-	res, err := putItem(tx, input)
+	res, err := putItem(tx, input, true)
 	if err != nil {
 		tx.txErr = errors.Wrap(err, "putItem")
 		return nil, err
@@ -143,7 +143,7 @@ func (tx *Transaction) UpdateItem(input *dynamodb.UpdateItemInput) (*dynamodb.Up
 		return nil, tx.txErr
 	}
 
-	res, err := updateItem(tx, input)
+	res, err := updateItem(tx, input, true)
 	if err != nil {
 		tx.txErr = errors.Wrap(err, "updateItem")
 		return nil, err
@@ -177,7 +177,24 @@ func (tx *Transaction) GetItem(input *dynamodb.GetItemInput) (*dynamodb.GetItemO
 		return nil, tx.txErr
 	}
 
-	res, err := getItem(tx, input)
+	res, err := getItem(tx, input, true)
+	if err != nil {
+		tx.txErr = errors.Wrap(err, "getItem")
+		return nil, err
+	}
+	return res, nil
+}
+
+// GetItemExpectNotExist is logically the same as GetItem.
+// However, it is optimized for the case where we expect the item to not exist.
+func (tx *Transaction) GetItemExpectNotExist(input *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error) {
+	tx.mutex.Lock()
+	defer tx.mutex.Unlock()
+	if tx.txErr != nil {
+		return nil, tx.txErr
+	}
+
+	res, err := getItem(tx, input, false)
 	if err != nil {
 		tx.txErr = errors.Wrap(err, "getItem")
 		return nil, err
@@ -253,12 +270,12 @@ func rollback(tx *Transaction) error {
 	return nil
 }
 
-func putItem(tx *Transaction, input *dynamodb.PutItemInput) (*dynamodb.PutItemOutput, error) {
+func putItem(tx *Transaction, input *dynamodb.PutItemInput, expectExists bool) (*dynamodb.PutItemOutput, error) {
 	wrappedRequest, err := newPutItemRequest(input, tx.txManager)
 	if err != nil {
 		return nil, errors.Wrap(err, "newPutItemRequest")
 	}
-	item, err := driveRequest(tx, wrappedRequest)
+	item, err := driveRequest(tx, wrappedRequest, expectExists)
 	if err != nil {
 		return nil, errors.Wrap(err, "driveRequest")
 	}
@@ -269,12 +286,12 @@ func putItem(tx *Transaction, input *dynamodb.PutItemInput) (*dynamodb.PutItemOu
 	return output, nil
 }
 
-func updateItem(tx *Transaction, input *dynamodb.UpdateItemInput) (*dynamodb.UpdateItemOutput, error) {
+func updateItem(tx *Transaction, input *dynamodb.UpdateItemInput, expectExists bool) (*dynamodb.UpdateItemOutput, error) {
 	wrappedRequest, err := newUpdateItemRequest(input)
 	if err != nil {
 		return nil, errors.Wrap(err, "newUpdateItemRequest")
 	}
-	item, err := driveRequest(tx, wrappedRequest)
+	item, err := driveRequest(tx, wrappedRequest, expectExists)
 	if err != nil {
 		return nil, errors.Wrap(err, "driveRequest")
 	}
@@ -290,7 +307,7 @@ func deleteItem(tx *Transaction, input *dynamodb.DeleteItemInput) (*dynamodb.Del
 	if err != nil {
 		return nil, errors.Wrap(err, "newDeleteItemRequest")
 	}
-	item, err := driveRequest(tx, wrappedRequest)
+	item, err := driveRequest(tx, wrappedRequest, true)
 	if err != nil {
 		return nil, errors.Wrap(err, "driveRequest")
 	}
@@ -301,12 +318,12 @@ func deleteItem(tx *Transaction, input *dynamodb.DeleteItemInput) (*dynamodb.Del
 	return output, nil
 }
 
-func getItem(tx *Transaction, input *dynamodb.GetItemInput) (*dynamodb.GetItemOutput, error) {
+func getItem(tx *Transaction, input *dynamodb.GetItemInput, expectExists bool) (*dynamodb.GetItemOutput, error) {
 	wrappedRequest, err := newGetItemRequest(input)
 	if err != nil {
 		return nil, errors.Wrap(err, "newGetItemRequest")
 	}
-	item, err := driveRequest(tx, wrappedRequest)
+	item, err := driveRequest(tx, wrappedRequest, expectExists)
 	if err != nil {
 		return nil, errors.Wrap(err, "driveRequest")
 	}
@@ -317,7 +334,7 @@ func getItem(tx *Transaction, input *dynamodb.GetItemInput) (*dynamodb.GetItemOu
 	return output, nil
 }
 
-func driveRequest(tx *Transaction, clientRequest txRequest) (map[string]*dynamodb.AttributeValue, error) {
+func driveRequest(tx *Transaction, clientRequest txRequest, expectExists bool) (map[string]*dynamodb.AttributeValue, error) {
 	if err := validateRequest(clientRequest, tx.txItem.id, tx.txManager); err != nil {
 		return nil, errors.Wrap(err, "validateRequest")
 	}
@@ -326,53 +343,60 @@ func driveRequest(tx *Transaction, clientRequest txRequest) (map[string]*dynamod
 		return nil, errors.Wrap(err, "addRequest")
 	}
 
-	item, err := lockAndApply(tx, clientRequest)
+	item, err := lockAndApply(tx, clientRequest, expectExists)
 	if err != nil {
 		return nil, errors.Wrap(err, "lockAndApply")
 	}
 	return item, nil
 }
 
-func probeToBeLockedItem(tx *Transaction, req txRequest) (bool, *Transaction, error) {
-	expectExists := false
-	item, owner, err := getItemTx(tx.txManager, req)
+func probeToBeLockedItem(tx *Transaction, req txRequest, expectExists bool) (bool, *Transaction) {
+	item, err := getItemByKey(tx.txManager, req.getTableName(), req.getKey())
 	if err != nil {
-		return expectExists, nil, nil
-	}
-	if item == nil {
-		return expectExists, nil, nil
+		if _, ok := err.(*notFoundError); ok {
+			return false, nil
+		}
+		return expectExists, nil
 	}
 	expectExists = true
 
-	if owner == nil {
-		return expectExists, nil, nil
+	ownerID := txGetOwner(item)
+	ownerTxItem, err := newTransactionItem(ownerID, tx.txManager, false)
+	if err != nil {
+		return expectExists, nil
 	}
-	if owner.txItem.id == tx.txItem.id {
-		tx.txItem = owner.txItem
-		state, err := tx.txItem.getState()
-		if err != nil {
-			return expectExists, nil, errors.Wrap(err, "getState")
-		}
-		switch state {
-		case TransactionItemStatePending:
-			return expectExists, nil, nil
-		case TransactionItemStateRolledBack:
-			return expectExists, nil, &TransactionRolledBackError{txItem: tx.txItem}
-		case TransactionItemStateCommitted:
-			return expectExists, nil, &TransactionCommittedError{txItem: tx.txItem}
-		default:
-			return expectExists, nil, fmt.Errorf("unknown state %s", state)
-		}
+	owner := &Transaction{
+		txManager: tx.txManager,
+		txItem:    ownerTxItem,
+		Retrier:   newJitterExpBackoff(),
 	}
-
-	return expectExists, owner, nil
+	return expectExists, owner
 }
 
-func lockAndApply(tx *Transaction, clientRequest txRequest) (map[string]*dynamodb.AttributeValue, error) {
+func isPending(tx *Transaction) error {
+	state, err := tx.txItem.getState()
+	if err != nil {
+		return errors.Wrap(err, "getState")
+	}
+	switch state {
+	case TransactionItemStatePending:
+		return nil
+	case TransactionItemStateRolledBack:
+		return &TransactionRolledBackError{txItem: tx.txItem}
+	case TransactionItemStateCommitted:
+		return &TransactionCommittedError{txItem: tx.txItem}
+	default:
+		return fmt.Errorf("unknown state %s", state)
+	}
+}
+
+func lockAndApply(tx *Transaction, clientRequest txRequest, expectExists bool) (map[string]*dynamodb.AttributeValue, error) {
 	var item map[string]*dynamodb.AttributeValue
 	var lockErr error
-	expectExists := true
+	// Reset the retrier as it might be used by the previous request in the transaction.
 	tx.Retrier.Reset()
+	// The first wait is zero, thus we skip it.
+	tx.Retrier.Wait()
 	for {
 		item, lockErr = lockAndApplyLogic(tx, clientRequest, expectExists)
 		if lockErr == nil {
@@ -388,18 +412,21 @@ func lockAndApply(tx *Transaction, clientRequest txRequest) (map[string]*dynamod
 			break
 		}
 
-		var otherTransaction *Transaction
-		var err error
-		expectExists, otherTransaction, err = probeToBeLockedItem(tx, clientRequest)
-		if err != nil {
-			return nil, errors.Wrap(err, "probeToBeLockedItem")
-		}
-
-		if !tx.Retrier.Wait() {
-			break
-		}
-		if otherTransaction != nil {
-			rollback(otherTransaction)
+		// Probe the to be locked item, and rollback the other transaction that is locking it.
+		var tblItemTx *Transaction
+		expectExists, tblItemTx = probeToBeLockedItem(tx, clientRequest, expectExists)
+		if tblItemTx != nil {
+			if tblItemTx.txItem.id == tx.txItem.id {
+				tx.txItem = tblItemTx.txItem
+				if err := isPending(tx); err != nil {
+					return nil, errors.Wrap(err, "isPending")
+				}
+			} else {
+				if !tx.Retrier.Wait() {
+					break
+				}
+				rollback(tblItemTx)
+			}
 		}
 	}
 	if lockErr != nil {

@@ -102,9 +102,9 @@ func (mg *TransactionManager) RunInTransaction(ops func(tx *Transaction) error) 
 
 // Sweep cleans up failed transactions.
 // Transactions whose last updated time plus rollbackDuration have passed are rolledback.
-// It is important to choose a rollbackDuration that is long enough to guarantee that there are no coordinators working on the transaction when Sweep is called.
-// Failing to do so might result in inconsistent item states.
 // If shouldDel is true, the transaction is deleted after the transaction is successfully rolledback.
+// Therefore, when shouldDel is true, it is important to choose a rollbackDuration that is long enough to guarantee that there are no coordinators working on the transaction when Sweep is called.
+// Failing to do so might result in inconsistent item states.
 //
 // A typical use case of this function is in the context of a background cleanup job.
 // The job would scan the transactions table, and for each transaction item it encounters,
@@ -208,9 +208,6 @@ func (mg *TransactionManager) RollbackOrCommit(id string) (bool, error) {
 
 	if err := rollback(tx); err != nil {
 		return false, errors.Wrap(err, "rollback")
-	}
-	if err := tx.txItem.delete(mg.ttlDuration); err != nil {
-		return false, errors.Wrap(err, "delete")
 	}
 
 	state, err := tx.txItem.getState()
